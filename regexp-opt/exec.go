@@ -316,7 +316,17 @@ func (m *machine) match(i input, pos int) bool {
 		pos += width
 		r, width = r1, width1
 		if r != endOfText {
-			r1, width1 = i.step(pos + width)
+			// Fast path for ASCII bytes in string input.
+			if len(rawStr) > 0 {
+				p := pos + width
+				if p < len(rawStr) && rawStr[p] < utf8.RuneSelf {
+					r1, width1 = rune(rawStr[p]), 1
+				} else {
+					r1, width1 = i.step(p)
+				}
+			} else {
+				r1, width1 = i.step(pos + width)
+			}
 		}
 		runq, nextq = nextq, runq
 	}
