@@ -249,30 +249,40 @@ func (m *machine) match(i input, pos int) bool {
 				// Start-rune filter: skip positions that can't start a match.
 				if sf.valid && len(rawStr) > 0 {
 					// Fast path: byte-level scan avoiding interface dispatch.
-					found := false
+					ascii := false
 					for pos < len(rawStr) {
 						b := rawStr[pos]
 						if b < utf8.RuneSelf {
 							if sf.asciiMap[b/32]&(1<<(uint(b)%32)) != 0 {
-								found = true
+								ascii = true
 								break
 							}
 							pos++
 						} else {
 							if sf.nonASCII {
-								found = true
 								break
 							}
 							_, w := utf8.DecodeRuneInString(rawStr[pos:])
 							pos += w
 						}
 					}
-					if !found {
+					if pos >= len(rawStr) {
 						break
 					}
-					r, width = i.step(pos)
-					if r != endOfText {
-						r1, width1 = i.step(pos + width)
+					if ascii {
+						// We know the byte at pos is ASCII — avoid interface dispatch.
+						r, width = rune(rawStr[pos]), 1
+						p := pos + 1
+						if p < len(rawStr) && rawStr[p] < utf8.RuneSelf {
+							r1, width1 = rune(rawStr[p]), 1
+						} else {
+							r1, width1 = i.step(p)
+						}
+					} else {
+						r, width = i.step(pos)
+						if r != endOfText {
+							r1, width1 = i.step(pos + width)
+						}
 					}
 				} else if sf.valid {
 					for r != endOfText && !sf.canStart(r) {
