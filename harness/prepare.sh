@@ -4,6 +4,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+mixed_copies=4000
+min_mixed_size=2000000000
+
 mkdir -p bench/testdata
 
 if [[ ! -f bench/testdata/sherlock.txt ]]; then
@@ -16,7 +19,7 @@ if [[ ! -f bench/testdata/mixed-content.txt ]]; then
 	rebuild_mixed=true
 else
 	mixed_size=$(wc -c < bench/testdata/mixed-content.txt)
-	if (( mixed_size > 10000000 )); then
+	if (( mixed_size < min_mixed_size )); then
 		rebuild_mixed=true
 	fi
 fi
@@ -29,7 +32,7 @@ Moriarty used aliases like arturo@naples.it and napier@oxford.edu in intercepted
 Unicode fragments: cafe naive jalapeno facade resume cooperate smorgasbord.
 Noise: ZXCVB12345 not-an-email another+tag@example.com ignored_by_regex.
 EOF
-	for i in $(seq 1 8); do
+	for i in $(seq 1 "$mixed_copies"); do
 		cat bench/testdata/sherlock.txt >> bench/testdata/mixed-content.txt
 		printf '\nname%04d@example.com Lestrade Holmes Watson Moriarty BakerStreet\n' "$i" >> bench/testdata/mixed-content.txt
 	done

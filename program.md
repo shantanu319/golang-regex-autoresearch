@@ -90,10 +90,13 @@ fi
 # 4. Run benchmark
 bash harness/score.sh > run.log 2>&1
 
-# 5. Extract metric
+# 5. The benchmark harness can take around 250 seconds with the full mixed-content haystack.
+#    Wait at least that long before assuming it is stuck. Sleeping is acceptable.
+
+# 6. Extract metric
 grep "^geomean_nsop:" run.log
 
-# 6. If individual benchmarks are needed:
+# 7. If individual benchmarks are needed:
 grep "^Benchmark" run.log
 ```
 
@@ -133,13 +136,14 @@ LOOP FOREVER:
 5. Run tests: `env GOCACHE="${GOCACHE:-/tmp/autoresearch-go-build}" go test ./regexp-opt/... > test.log 2>&1`
    - If FAIL: attempt fix (max 3 tries), else revert and log as `crash`
 6. Run benchmark: `bash harness/score.sh > run.log 2>&1`
-7. Extract: `grep "^geomean_nsop:" run.log`
+7. Wait about 250 seconds before treating a long-running benchmark as hung.
+8. Extract: `grep "^geomean_nsop:" run.log`
    - If empty: run crashed. `tail -50 run.log`, attempt fix or revert.
-8. Compare to best known geomean_nsop.
+9. Compare to best known geomean_nsop.
    - If improved: `keep`. Branch advances.
    - If equal or worse: `discard`. `git reset --hard HEAD~1`
-9. Log result to `results.tsv`.
-10. Go to 1.
+10. Log result to `results.tsv`.
+11. Go to 1.
 
 ## Simplicity criterion
 
