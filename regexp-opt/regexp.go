@@ -100,6 +100,7 @@ type Regexp struct {
 	innerLiteralBytes []byte
 	innerLiteralMaxOff int // max byte offset from match start to inner literal, -1 if unbounded
 
+
 	// This field can be modified by the Longest method,
 	// but it is otherwise read-only.
 	longest bool // whether regexp prefers leftmost-longest match

@@ -10,6 +10,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // A queue is a 'sparse array' holding pending threads of execution.
@@ -199,6 +200,11 @@ func (m *machine) match(i input, pos int) bool {
 	sf := &m.re.startFilter
 	// Cached position of next inner literal occurrence (-2 = not yet searched).
 	innerLitPos := -2
+	// For SIMD-accelerated start byte scanning.
+	var rawStr string
+	if si, ok := i.(*inputString); ok {
+		rawStr = si.str
+	}
 	for {
 		if len(runq.dense) == 0 {
 			if startCond&syntax.EmptyBeginText != 0 && pos != 0 {
@@ -241,7 +247,34 @@ func (m *machine) match(i input, pos int) bool {
 					}
 				}
 				// Start-rune filter: skip positions that can't start a match.
-				if sf.valid {
+				if sf.valid && len(rawStr) > 0 {
+					// Fast path: byte-level scan avoiding interface dispatch.
+					found := false
+					for pos < len(rawStr) {
+						b := rawStr[pos]
+						if b < utf8.RuneSelf {
+							if sf.asciiMap[b/32]&(1<<(uint(b)%32)) != 0 {
+								found = true
+								break
+							}
+							pos++
+						} else {
+							if sf.nonASCII {
+								found = true
+								break
+							}
+							_, w := utf8.DecodeRuneInString(rawStr[pos:])
+							pos += w
+						}
+					}
+					if !found {
+						break
+					}
+					r, width = i.step(pos)
+					if r != endOfText {
+						r1, width1 = i.step(pos + width)
+					}
+				} else if sf.valid {
 					for r != endOfText && !sf.canStart(r) {
 						pos += width
 						r, width = r1, width1
