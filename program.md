@@ -136,7 +136,7 @@ LOOP FOREVER:
 5. Run tests: `env GOCACHE="${GOCACHE:-/tmp/autoresearch-go-build}" go test ./regexp-opt/... > test.log 2>&1`
    - If FAIL: attempt fix (max 3 tries), else revert and log as `crash`
 6. Run benchmark: `bash harness/score.sh > run.log 2>&1`
-7. Wait about 250 seconds before treating a long-running benchmark as hung.
+7. Wait 240 seconds before treating a long-running benchmark as hung.
 8. Extract: `grep "^geomean_nsop:" run.log`
    - If empty: run crashed. `tail -50 run.log`, attempt fix or revert.
 9. Compare to best known geomean_nsop.

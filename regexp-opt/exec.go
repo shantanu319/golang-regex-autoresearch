@@ -244,6 +244,26 @@ func (m *machine) match(i input, pos int) bool {
 								r1, width1 = i.step(pos + width)
 							}
 						}
+					} else if sf.valid && len(rawStr) > 0 && innerLitPos-pos > 64 {
+						// Unbounded offset: walk backward from the inner literal
+						// through characters that pass the start-rune filter to find
+						// the start of the contiguous run containing the literal.
+						runStart := innerLitPos
+						for runStart > pos {
+							b := rawStr[runStart-1]
+							if b < utf8.RuneSelf && sf.asciiMap[b/32]&(1<<(uint(b)%32)) != 0 {
+								runStart--
+							} else {
+								break
+							}
+						}
+						if runStart > pos {
+							pos = runStart
+							r, width = i.step(pos)
+							if r != endOfText {
+								r1, width1 = i.step(pos + width)
+							}
+						}
 					}
 				}
 				// Start-rune filter: skip positions that can't start a match.
