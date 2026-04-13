@@ -333,6 +333,7 @@ func (re *Regexp) backtrack(ib []byte, is string, pos int, ncap int, dstCap []in
 		// This looks like it's quadratic in the size of the text,
 		// but we are not clearing visited between calls to TrySearch,
 		// so no work is duplicated and it ends up still being linear.
+		sf := &re.startFilter
 		width := -1
 		for ; pos <= end && width != 0; pos += width {
 			if len(re.prefix) > 0 {
@@ -345,6 +346,14 @@ func (re *Regexp) backtrack(ib []byte, is string, pos int, ncap int, dstCap []in
 				pos += advance
 			}
 
+			r, w := i.step(pos)
+			width = w
+
+			// Start-rune filter: skip positions that can't start a match.
+			if sf.valid && r != endOfText && !sf.canStart(r) {
+				continue
+			}
+
 			if len(b.cap) > 0 {
 				b.cap[0] = pos
 			}
@@ -352,7 +361,6 @@ func (re *Regexp) backtrack(ib []byte, is string, pos int, ncap int, dstCap []in
 				// Match must be leftmost; done.
 				goto Match
 			}
-			_, width = i.step(pos)
 		}
 		freeBitState(b)
 		return nil

@@ -93,10 +93,26 @@ type Regexp struct {
 	prefixComplete bool           // prefix is the entire regexp
 	cond           syntax.EmptyOp // empty-width conditions required at start of match
 	minInputLen    int            // minimum length of the input in bytes
+	startFilter    runeFilter     // bitmap of runes that can start a match
 
 	// This field can be modified by the Longest method,
 	// but it is otherwise read-only.
 	longest bool // whether regexp prefers leftmost-longest match
+}
+
+// runeFilter is a bitmap of ASCII runes (0-127) that can start a match,
+// plus a flag for whether non-ASCII runes can start a match.
+type runeFilter struct {
+	asciiMap [4]uint32 // bitmap for runes 0-127
+	nonASCII bool      // true if runes >= 128 can start a match
+	valid    bool      // true if the filter was successfully computed
+}
+
+func (f *runeFilter) canStart(r rune) bool {
+	if r < 128 {
+		return f.asciiMap[r/32]&(1<<(uint(r)%32)) != 0
+	}
+	return f.nonASCII
 }
 
 // String returns the source text used to compile the regular expression.
@@ -191,6 +207,7 @@ func compile(expr string, mode syntax.Flags, longest bool) (*Regexp, error) {
 		longest:     longest,
 		matchcap:    matchcap,
 		minInputLen: minInputLen(re),
+		startFilter: computeStartFilter(re),
 	}
 	if regexp.onepass == nil {
 		regexp.prefix, regexp.prefixComplete = prog.Prefix()
@@ -301,6 +318,143 @@ func minInputLen(re *syntax.Regexp) int {
 			}
 		}
 		return l
+	}
+}
+
+// computeStartFilter builds a runeFilter from the simplified syntax tree.
+// The filter identifies which runes can appear as the first consumed character
+// in any match. Positions where the current rune is not in the filter can be
+// skipped without engaging the NFA.
+func computeStartFilter(re *syntax.Regexp) runeFilter {
+	var f runeFilter
+	if collectStartRunes(re, &f.asciiMap, &f.nonASCII) {
+		f.valid = true
+	}
+	return f
+}
+
+// collectStartRunes walks the syntax tree and collects runes that can appear
+// as the first consumed character. Returns true if a useful filter was computed,
+// false if the pattern can start with any rune (filter is not useful).
+func collectStartRunes(re *syntax.Regexp, asciiMap *[4]uint32, nonASCII *bool) bool {
+	switch re.Op {
+	case syntax.OpLiteral:
+		if len(re.Rune) == 0 {
+			return false // matches empty string
+		}
+		r := re.Rune[0]
+		addStartRune(r, asciiMap, nonASCII)
+		if re.Flags&syntax.FoldCase != 0 {
+			for r1 := unicode.SimpleFold(r); r1 != r; r1 = unicode.SimpleFold(r1) {
+				addStartRune(r1, asciiMap, nonASCII)
+			}
+		}
+		return true
+	case syntax.OpCharClass:
+		for i := 0; i < len(re.Rune); i += 2 {
+			addStartRuneRange(re.Rune[i], re.Rune[i+1], asciiMap, nonASCII)
+		}
+		return true
+	case syntax.OpAnyChar, syntax.OpAnyCharNotNL:
+		return false // any rune can start
+	case syntax.OpCapture, syntax.OpPlus:
+		return collectStartRunes(re.Sub[0], asciiMap, nonASCII)
+	case syntax.OpStar, syntax.OpQuest:
+		return false // can match zero characters
+	case syntax.OpRepeat:
+		if re.Min > 0 {
+			return collectStartRunes(re.Sub[0], asciiMap, nonASCII)
+		}
+		return false // min=0 means optional
+	case syntax.OpConcat:
+		for _, sub := range re.Sub {
+			switch sub.Op {
+			case syntax.OpEmptyMatch, syntax.OpBeginLine, syntax.OpEndLine,
+				syntax.OpBeginText, syntax.OpEndText, syntax.OpWordBoundary,
+				syntax.OpNoWordBoundary:
+				continue // empty-width: skip, look at next sub
+			}
+			ok := collectStartRunes(sub, asciiMap, nonASCII)
+			if !ok {
+				return false
+			}
+			if !canMatchEmpty(sub) {
+				return true // this sub is required, done
+			}
+			// sub can be empty, also consider next sub
+		}
+		return false // all subs can be empty
+	case syntax.OpAlternate:
+		for _, sub := range re.Sub {
+			if !collectStartRunes(sub, asciiMap, nonASCII) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+func addStartRune(r rune, asciiMap *[4]uint32, nonASCII *bool) {
+	if r < 128 {
+		asciiMap[r/32] |= 1 << (uint(r) % 32)
+	} else {
+		*nonASCII = true
+	}
+}
+
+func addStartRuneRange(lo, hi rune, asciiMap *[4]uint32, nonASCII *bool) {
+	if hi >= 128 {
+		*nonASCII = true
+	}
+	if lo >= 128 {
+		return
+	}
+	top := hi
+	if top > 127 {
+		top = 127
+	}
+	for r := lo; r <= top; r++ {
+		asciiMap[r/32] |= 1 << (uint(r) % 32)
+	}
+}
+
+// canMatchEmpty reports whether re can match an empty string.
+func canMatchEmpty(re *syntax.Regexp) bool {
+	switch re.Op {
+	case syntax.OpEmptyMatch, syntax.OpBeginLine, syntax.OpEndLine,
+		syntax.OpBeginText, syntax.OpEndText, syntax.OpWordBoundary,
+		syntax.OpNoWordBoundary:
+		return true
+	case syntax.OpStar, syntax.OpQuest:
+		return true
+	case syntax.OpRepeat:
+		return re.Min == 0
+	case syntax.OpLiteral:
+		return len(re.Rune) == 0
+	case syntax.OpCharClass, syntax.OpAnyChar, syntax.OpAnyCharNotNL:
+		return false
+	case syntax.OpCapture:
+		return canMatchEmpty(re.Sub[0])
+	case syntax.OpPlus:
+		return canMatchEmpty(re.Sub[0])
+	case syntax.OpConcat:
+		for _, sub := range re.Sub {
+			if !canMatchEmpty(sub) {
+				return false
+			}
+		}
+		return true
+	case syntax.OpAlternate:
+		for _, sub := range re.Sub {
+			if canMatchEmpty(sub) {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
 	}
 }
 
