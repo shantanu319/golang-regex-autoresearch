@@ -334,6 +334,8 @@ func (re *Regexp) backtrack(ib []byte, is string, pos int, ncap int, dstCap []in
 		// but we are not clearing visited between calls to TrySearch,
 		// so no work is duplicated and it ends up still being linear.
 		sf := &re.startFilter
+		hasInnerLit := len(re.innerLiteral) > 0
+		innerLitPos := -2 // cached position of next inner literal
 		width := -1
 		for ; pos <= end && width != 0; pos += width {
 			if len(re.prefix) > 0 {
@@ -344,6 +346,22 @@ func (re *Regexp) backtrack(ib []byte, is string, pos int, ncap int, dstCap []in
 					return nil
 				}
 				pos += advance
+			} else if hasInnerLit {
+				// Inner literal prefilter with caching.
+				if innerLitPos < pos {
+					advance := i.indexInner(re, pos)
+					if advance < 0 {
+						freeBitState(b)
+						return nil
+					}
+					innerLitPos = pos + advance
+				}
+				if re.innerLiteralMaxOff >= 0 {
+					skipTo := innerLitPos - re.innerLiteralMaxOff
+					if skipTo > pos {
+						pos = skipTo
+					}
+				}
 			}
 
 			r, w := i.step(pos)

@@ -95,6 +95,11 @@ type Regexp struct {
 	minInputLen    int            // minimum length of the input in bytes
 	startFilter    runeFilter     // bitmap of runes that can start a match
 
+	// Inner literal: a literal string that must appear somewhere in any match.
+	innerLiteral      string // required literal inside the pattern
+	innerLiteralBytes []byte
+	innerLiteralMaxOff int // max byte offset from match start to inner literal, -1 if unbounded
+
 	// This field can be modified by the Longest method,
 	// but it is otherwise read-only.
 	longest bool // whether regexp prefers leftmost-longest match
@@ -220,6 +225,14 @@ func compile(expr string, mode syntax.Flags, longest bool) (*Regexp, error) {
 		// IndexString to package bytes.
 		regexp.prefixBytes = []byte(regexp.prefix)
 		regexp.prefixRune, _ = utf8.DecodeRuneInString(regexp.prefix)
+	}
+
+	// Extract inner literal for prefiltering (only useful if no prefix already).
+	if regexp.prefix == "" {
+		regexp.innerLiteral, regexp.innerLiteralMaxOff = findInnerLiteral(re)
+		if regexp.innerLiteral != "" {
+			regexp.innerLiteralBytes = []byte(regexp.innerLiteral)
+		}
 	}
 
 	n := len(prog.Inst)
@@ -458,6 +471,103 @@ func canMatchEmpty(re *syntax.Regexp) bool {
 	}
 }
 
+// findInnerLiteral extracts a required literal string from the pattern interior.
+// Returns the literal and the maximum byte offset from the match start to the
+// literal's position. maxOffset is -1 if the offset is unbounded.
+func findInnerLiteral(re *syntax.Regexp) (literal string, maxOffset int) {
+	if re.Op == syntax.OpCapture {
+		return findInnerLiteral(re.Sub[0])
+	}
+	if re.Op != syntax.OpConcat {
+		return "", -1
+	}
+	cumMaxLen := 0 // cumulative max byte length of preceding subs, -1 if unbounded
+	bestLiteral := ""
+	bestOffset := -1
+	for _, sub := range re.Sub {
+		if sub.Op == syntax.OpLiteral && sub.Flags&syntax.FoldCase == 0 && len(sub.Rune) > 0 {
+			lit := string(sub.Rune)
+			offset := cumMaxLen
+			// Prefer longer literal, or bounded offset over unbounded.
+			if len(lit) > len(bestLiteral) ||
+				(len(lit) == len(bestLiteral) && offset >= 0 && bestOffset < 0) {
+				bestLiteral = lit
+				bestOffset = offset
+			}
+		}
+		n := maxByteLen(sub)
+		if cumMaxLen >= 0 && n >= 0 {
+			cumMaxLen += n
+		} else {
+			cumMaxLen = -1
+		}
+	}
+	return bestLiteral, bestOffset
+}
+
+// maxByteLen returns the maximum number of bytes the syntax tree can match,
+// or -1 if unbounded.
+func maxByteLen(re *syntax.Regexp) int {
+	switch re.Op {
+	case syntax.OpLiteral:
+		n := 0
+		for _, r := range re.Rune {
+			n += utf8.RuneLen(r)
+		}
+		return n
+	case syntax.OpCharClass:
+		maxSize := 1
+		for i := 0; i < len(re.Rune); i += 2 {
+			if re.Rune[i+1] >= utf8.RuneSelf {
+				maxSize = utf8.UTFMax
+				break
+			}
+		}
+		return maxSize
+	case syntax.OpAnyChar, syntax.OpAnyCharNotNL:
+		return utf8.UTFMax
+	case syntax.OpCapture:
+		return maxByteLen(re.Sub[0])
+	case syntax.OpPlus, syntax.OpStar:
+		return -1 // unbounded
+	case syntax.OpQuest:
+		return maxByteLen(re.Sub[0])
+	case syntax.OpRepeat:
+		if re.Max < 0 {
+			return -1
+		}
+		sub := maxByteLen(re.Sub[0])
+		if sub < 0 {
+			return -1
+		}
+		return re.Max * sub
+	case syntax.OpConcat:
+		total := 0
+		for _, sub := range re.Sub {
+			n := maxByteLen(sub)
+			if n < 0 {
+				return -1
+			}
+			total += n
+		}
+		return total
+	case syntax.OpAlternate:
+		best := 0
+		for _, sub := range re.Sub {
+			n := maxByteLen(sub)
+			if n < 0 {
+				return -1
+			}
+			if n > best {
+				best = n
+			}
+		}
+		return best
+	default: // empty-width ops
+		return 0
+	}
+}
+
 // MustCompile is like [Compile] but panics if the expression cannot be parsed.
 // It simplifies safe initialization of global variables holding compiled regular
 // expressions.
@@ -528,6 +638,7 @@ type input interface {
 	canCheckPrefix() bool             // can we look ahead without losing info?
 	hasPrefix(re *Regexp) bool
 	index(re *Regexp, pos int) int
+	indexInner(re *Regexp, pos int) int // find inner literal from pos
 	context(pos int) lazyFlag
 }
 
@@ -553,6 +664,10 @@ func (i *inputString) hasPrefix(re *Regexp) bool {
 
 func (i *inputString) index(re *Regexp, pos int) int {
 	return strings.Index(i.str[pos:], re.prefix)
+}
+
+func (i *inputString) indexInner(re *Regexp, pos int) int {
+	return strings.Index(i.str[pos:], re.innerLiteral)
 }
 
 func (i *inputString) context(pos int) lazyFlag {
@@ -590,6 +705,10 @@ func (i *inputBytes) hasPrefix(re *Regexp) bool {
 
 func (i *inputBytes) index(re *Regexp, pos int) int {
 	return bytes.Index(i.str[pos:], re.prefixBytes)
+}
+
+func (i *inputBytes) indexInner(re *Regexp, pos int) int {
+	return bytes.Index(i.str[pos:], re.innerLiteralBytes)
 }
 
 func (i *inputBytes) context(pos int) lazyFlag {
@@ -635,6 +754,10 @@ func (i *inputReader) hasPrefix(re *Regexp) bool {
 }
 
 func (i *inputReader) index(re *Regexp, pos int) int {
+	return -1
+}
+
+func (i *inputReader) indexInner(re *Regexp, pos int) int {
 	return -1
 }
 

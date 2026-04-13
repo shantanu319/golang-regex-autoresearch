@@ -197,6 +197,8 @@ func (m *machine) match(i input, pos int) bool {
 		flag = i.context(pos)
 	}
 	sf := &m.re.startFilter
+	// Cached position of next inner literal occurrence (-2 = not yet searched).
+	innerLitPos := -2
 	for {
 		if len(runq.dense) == 0 {
 			if startCond&syntax.EmptyBeginText != 0 && pos != 0 {
@@ -216,17 +218,40 @@ func (m *machine) match(i input, pos int) bool {
 				pos += advance
 				r, width = i.step(pos)
 				r1, width1 = i.step(pos + width)
-			} else if sf.valid {
-				// Start-rune filter: skip positions that can't start a match.
-				for r != endOfText && !sf.canStart(r) {
-					pos += width
-					r, width = r1, width1
-					if r != endOfText {
-						r1, width1 = i.step(pos + width)
+			} else {
+				// Inner literal prefilter: use cached position to avoid repeated searches.
+				if len(m.re.innerLiteral) > 0 && i.canCheckPrefix() {
+					// Re-search only if we've passed the cached position.
+					if innerLitPos < pos {
+						advance := i.indexInner(m.re, pos)
+						if advance < 0 {
+							break // no more matches possible
+						}
+						innerLitPos = pos + advance
+					}
+					if m.re.innerLiteralMaxOff >= 0 {
+						skipTo := innerLitPos - m.re.innerLiteralMaxOff
+						if skipTo > pos {
+							pos = skipTo
+							r, width = i.step(pos)
+							if r != endOfText {
+								r1, width1 = i.step(pos + width)
+							}
+						}
 					}
 				}
-				if r == endOfText {
-					break
+				// Start-rune filter: skip positions that can't start a match.
+				if sf.valid {
+					for r != endOfText && !sf.canStart(r) {
+						pos += width
+						r, width = r1, width1
+						if r != endOfText {
+							r1, width1 = i.step(pos + width)
+						}
+					}
+					if r == endOfText {
+						break
+					}
 				}
 			}
 		}
