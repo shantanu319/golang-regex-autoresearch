@@ -255,7 +255,7 @@ func (m *machine) match(i input, pos int) bool {
 				}
 			}
 		}
-		if !m.matched {
+		if !m.matched && (startCond == 0 || flag.match(startCond)) {
 			if len(m.matchcap) > 0 {
 				m.matchcap[0] = pos
 			}
