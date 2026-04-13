@@ -6,7 +6,9 @@ package regexp
 
 import (
 	"autoresearch-regex/regexp-opt/syntax"
+	"bytes"
 	"io"
+	"strings"
 	"sync"
 )
 
@@ -525,6 +527,32 @@ func (re *Regexp) doExecute(r io.RuneReader, b []byte, s string, pos int, ncap i
 	}
 
 	if r == nil && len(b)+len(s) < re.minInputLen {
+		return nil
+	}
+
+	// Fast path for complete literal patterns: bypass regex engine entirely.
+	// Only when ncap <= 2 (no submatch capture groups needed).
+	if r == nil && re.prefixComplete && len(re.prefix) > 0 && re.cond == 0 && ncap <= 2 {
+		if len(s) > 0 {
+			idx := strings.Index(s[pos:], re.prefix)
+			if idx < 0 {
+				return nil
+			}
+			if ncap > 0 {
+				dstCap = append(dstCap, pos+idx, pos+idx+len(re.prefix))
+			}
+			return dstCap
+		}
+		if len(b) > 0 {
+			idx := bytes.Index(b[pos:], re.prefixBytes)
+			if idx < 0 {
+				return nil
+			}
+			if ncap > 0 {
+				dstCap = append(dstCap, pos+idx, pos+idx+len(re.prefix))
+			}
+			return dstCap
+		}
 		return nil
 	}
 
