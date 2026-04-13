@@ -4,6 +4,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+export GOCACHE="${GOCACHE:-/tmp/autoresearch-go-build}"
+
 go test -bench=. -benchtime=2s -count=3 ./bench/ 2>&1 | tee run.log
 
 grep -E "^Benchmark" run.log \

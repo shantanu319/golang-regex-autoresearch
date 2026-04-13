@@ -16,7 +16,8 @@ You are an autonomous researcher optimizing Go's standard library regexp package
 4. Read `bench/bench_test.go` to understand what is being measured.
 5. Run `bash harness/prepare.sh` to download test data (if not present).
 6. Initialize `results.tsv` with header row.
-7. Confirm setup, then start experimentation.
+7. If `go test` cannot write to the default build cache, export `GOCACHE=/tmp/autoresearch-go-build`.
+8. Confirm setup, then start experimentation.
 
 ## Experimentation
 
@@ -41,7 +42,7 @@ benchmarks. Lower is better.
 ### Correctness gate
 Before recording ANY result, you MUST run:
 ```bash
-go test ./regexp-opt/... 2>&1 | tail -5
+env GOCACHE="${GOCACHE:-/tmp/autoresearch-go-build}" go test ./regexp-opt/... 2>&1 | tail -5
 ```
 If ANY test fails, the experiment is invalid. Fix or revert.
 
@@ -78,7 +79,7 @@ These are starting points, not an exhaustive list:
 git add -A && git commit -m "<description of change>"
 
 # 3. Run correctness tests
-go test ./regexp-opt/... > test.log 2>&1
+env GOCACHE="${GOCACHE:-/tmp/autoresearch-go-build}" go test ./regexp-opt/... > test.log 2>&1
 if grep -q "FAIL" test.log; then
     echo "TESTS FAILED — revert or fix"
     tail -20 test.log
@@ -129,7 +130,7 @@ LOOP FOREVER:
    - Diverse exploration (don't keep tweaking the same thing)
 3. Edit files in `regexp-opt/`.
 4. `git add -A && git commit -m "<description>"`
-5. Run tests: `go test ./regexp-opt/... > test.log 2>&1`
+5. Run tests: `env GOCACHE="${GOCACHE:-/tmp/autoresearch-go-build}" go test ./regexp-opt/... > test.log 2>&1`
    - If FAIL: attempt fix (max 3 tries), else revert and log as `crash`
 6. Run benchmark: `bash harness/score.sh > run.log 2>&1`
 7. Extract: `grep "^geomean_nsop:" run.log`
