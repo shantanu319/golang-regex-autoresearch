@@ -289,10 +289,19 @@ func (m *machine) match(i input, pos int) bool {
 			}
 		}
 		if !m.matched && (startCond == 0 || flag.match(startCond)) {
+			// Fast check: if the first rune PC is already in the queue
+			// (from a previous position's thread), the add would be a no-op.
+			if m.re.hasFirstRunePC {
+				frpc := m.re.firstRunePC
+				if j := runq.sparse[frpc]; j < uint32(len(runq.dense)) && runq.dense[j].pc == frpc {
+					goto skipAdd
+				}
+			}
 			if len(m.matchcap) > 0 {
 				m.matchcap[0] = pos
 			}
 			m.add(runq, uint32(m.p.Start), pos, m.matchcap, &flag, nil)
+		skipAdd:
 		}
 		flag = newLazyFlag(r, r1)
 		m.step(runq, nextq, pos, pos+width, r, &flag)

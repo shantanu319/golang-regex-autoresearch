@@ -95,6 +95,12 @@ type Regexp struct {
 	minInputLen    int            // minimum length of the input in bytes
 	startFilter    runeFilter     // bitmap of runes that can start a match
 
+	// First rune PC: the first rune-consuming instruction reachable from Start
+	// through non-consuming instructions (Nop, Capture). Used to fast-check
+	// whether adding a start state would be a no-op (PC already in queue).
+	firstRunePC uint32
+	hasFirstRunePC bool
+
 	// Inner literal: a literal string that must appear somewhere in any match.
 	innerLiteral      string // required literal inside the pattern
 	innerLiteralBytes []byte
@@ -227,6 +233,9 @@ func compile(expr string, mode syntax.Flags, longest bool) (*Regexp, error) {
 		regexp.prefixBytes = []byte(regexp.prefix)
 		regexp.prefixRune, _ = utf8.DecodeRuneInString(regexp.prefix)
 	}
+
+	// Precompute first rune PC for fast queue dedup check.
+	regexp.firstRunePC, regexp.hasFirstRunePC = findFirstRunePC(prog)
 
 	// Extract inner literal for prefiltering (only useful if no prefix already).
 	if regexp.prefix == "" {
@@ -470,6 +479,24 @@ func canMatchEmpty(re *syntax.Regexp) bool {
 	default:
 		return false
 	}
+}
+
+// findFirstRunePC walks from the program start through non-consuming instructions
+// (Nop, Capture) to find the first rune-consuming instruction.
+func findFirstRunePC(prog *syntax.Prog) (uint32, bool) {
+	pc := uint32(prog.Start)
+	for i := 0; i < 10; i++ { // limit depth to avoid infinite loops
+		inst := &prog.Inst[pc]
+		switch inst.Op {
+		case syntax.InstNop, syntax.InstCapture:
+			pc = inst.Out
+		case syntax.InstRune, syntax.InstRune1, syntax.InstRuneAny, syntax.InstRuneAnyNotNL:
+			return pc, true
+		default:
+			return 0, false
+		}
+	}
+	return 0, false
 }
 
 // findInnerLiteral extracts a required literal string from the pattern interior.
