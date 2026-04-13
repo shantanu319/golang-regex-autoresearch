@@ -394,7 +394,18 @@ func (m *machine) step(runq, nextq *queue, pos, nextPos int, c rune, nextCond *l
 			m.matched = true
 
 		case syntax.InstRune:
-			add = i.MatchRune(c)
+			// Inline check for small character classes (avoids function call).
+			switch rn := i.Rune; len(rn) {
+			case 2:
+				add = c >= rn[0] && c <= rn[1]
+			case 4:
+				add = (c >= rn[0] && c <= rn[1]) || (c >= rn[2] && c <= rn[3])
+			case 8:
+				add = (c >= rn[0] && c <= rn[1]) || (c >= rn[2] && c <= rn[3]) ||
+					(c >= rn[4] && c <= rn[5]) || (c >= rn[6] && c <= rn[7])
+			default:
+				add = i.MatchRune(c)
+			}
 		case syntax.InstRune1:
 			add = c == i.Rune[0]
 		case syntax.InstRuneAny:
