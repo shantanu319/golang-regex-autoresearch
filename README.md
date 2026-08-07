@@ -259,10 +259,11 @@ Gitignored: `results.tsv`, `run.log`, `test.log`, `bench/testdata/*.txt`.
 
 ## Running it
 
-**Go 1.25 or newer is required.** The vendored `regexp-opt/syntax/parse.go` uses
-`unicode.CategoryAliases` and `unicode.Cn`, which do not exist before 1.25 — on
-1.24 the package fails to build. Note that `go.mod` still declares `go 1.22`,
-which understates the real requirement.
+**Go 1.25 or newer is required**, and `go.mod` declares it. The vendored
+`regexp-opt/syntax/parse.go` uses `unicode.CategoryAliases` and `unicode.Cn`,
+which do not exist before 1.25. On an older toolchain the default
+`GOTOOLCHAIN=auto` fetches a 1.25 toolchain and proceeds; with
+`GOTOOLCHAIN=local` you get `go.mod requires go >= 1.25` instead.
 
 ```bash
 bash harness/prepare.sh          # downloads sherlock.txt, builds ~2.4 GB haystack
