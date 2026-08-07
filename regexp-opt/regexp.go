@@ -106,6 +106,11 @@ type Regexp struct {
 	innerLiteralBytes []byte
 	innerLiteralMaxOff int // max byte offset from match start to inner literal, -1 if unbounded
 
+	// hasEmptyWidth reports whether the program contains any InstEmptyWidth
+	// (\b, \B, ^, $). Only such programs consult the start-position context
+	// flag, so only they need it recomputed after a prefilter skips ahead.
+	hasEmptyWidth bool
+
 
 	// This field can be modified by the Longest method,
 	// but it is otherwise read-only.
@@ -236,6 +241,13 @@ func compile(expr string, mode syntax.Flags, longest bool) (*Regexp, error) {
 
 	// Precompute first rune PC for fast queue dedup check.
 	regexp.firstRunePC, regexp.hasFirstRunePC = findFirstRunePC(prog)
+
+	for j := range prog.Inst {
+		if prog.Inst[j].Op == syntax.InstEmptyWidth {
+			regexp.hasEmptyWidth = true
+			break
+		}
+	}
 
 	// Extract inner literal for prefiltering (only useful if no prefix already).
 	if regexp.prefix == "" {

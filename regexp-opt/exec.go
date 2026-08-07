@@ -207,6 +207,7 @@ func (m *machine) match(i input, pos int) bool {
 	}
 	for {
 		if len(runq.dense) == 0 {
+			posBefore := pos
 			if startCond&syntax.EmptyBeginText != 0 && pos != 0 {
 				// Anchored match, past beginning of text.
 				break
@@ -316,6 +317,14 @@ func (m *machine) match(i input, pos int) bool {
 						break
 					}
 				}
+			}
+			// A prefilter above may have jumped pos forward. flag still holds the
+			// empty-width context of the position we skipped from, so any leading
+			// \b, \B, ^ or $ would be evaluated against the wrong neighbours.
+			// Recompute it. Only programs that actually contain an InstEmptyWidth
+			// ever consult flag here, so everything else skips the work.
+			if pos != posBefore && m.re.hasEmptyWidth {
+				flag = i.context(pos)
 			}
 		}
 		if !m.matched && (startCond == 0 || flag.match(startCond)) {
