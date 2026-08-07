@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="478" viewBox="0 0 860 478" role="img" aria-label="Suite geomean ns/op across each experiment, falling from 3.65 ms to 0.50 ms">
+<rect width="860" height="478" fill="#1a1a19"/>
+<text x="78.0" y="38.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="19" font-weight="600" fill="#ffffff" text-anchor="start">Suite geomean, stock go/regexp to now</text>
+<text x="78.0" y="60.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="13" font-weight="400" fill="#c3c2b7" text-anchor="start">Geometric mean of ns/op over all 9 benchmarks. Lower is faster.</text>
+<line x1="78" y1="360.0" x2="834" y2="360.0" stroke="#2c2c2a" stroke-width="1"/>
+<text x="66.0" y="364.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="400" fill="#898781" text-anchor="end" style="font-variant-numeric:tabular-nums">0</text>
+<line x1="78" y1="296.0" x2="834" y2="296.0" stroke="#2c2c2a" stroke-width="1"/>
+<text x="66.0" y="300.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="400" fill="#898781" text-anchor="end" style="font-variant-numeric:tabular-nums">1 ms</text>
+<line x1="78" y1="232.0" x2="834" y2="232.0" stroke="#2c2c2a" stroke-width="1"/>
+<text x="66.0" y="236.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="400" fill="#898781" text-anchor="end" style="font-variant-numeric:tabular-nums">2 ms</text>
+<line x1="78" y1="168.0" x2="834" y2="168.0" stroke="#2c2c2a" stroke-width="1"/>
+<text x="66.0" y="172.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="400" fill="#898781" text-anchor="end" style="font-variant-numeric:tabular-nums">3 ms</text>
+<line x1="78" y1="104.0" x2="834" y2="104.0" stroke="#2c2c2a" stroke-width="1"/>
+<text x="66.0" y="108.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="400" fill="#898781" text-anchor="end" style="font-variant-numeric:tabular-nums">4 ms</text>
+<path d="M97.5,360 L97.5,130.7 Q97.5,126.7 101.5,126.7 L117.5,126.7 Q121.5,126.7 121.5,130.7 L121.5,360 Z" fill="#3987e5"/>
+<text x="109.5" y="377.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#898781" text-anchor="middle">9f13eb0</text>
+<path d="M160.5,360 L160.5,191.9 Q160.5,187.9 164.5,187.9 L180.5,187.9 Q184.5,187.9 184.5,191.9 L184.5,360 Z" fill="#3987e5"/>
+<text x="172.5" y="377.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#898781" text-anchor="middle">d428c38</text>
+<path d="M223.5,360 L223.5,264.0 Q223.5,260.0 227.5,260.0 L243.5,260.0 Q247.5,260.0 247.5,264.0 L247.5,360 Z" fill="#3987e5"/>
+<text x="235.5" y="377.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#898781" text-anchor="middle">60cc9ec</text>
+<path d="M286.5,360 L286.5,289.7 Q286.5,285.7 290.5,285.7 L306.5,285.7 Q310.5,285.7 310.5,289.7 L310.5,360 Z" fill="#3987e5"/>
+<text x="298.5" y="377.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#898781" text-anchor="middle">77ac2be</text>
+<path d="M349.5,360 L349.5,289.1 Q349.5,285.1 353.5,285.1 L369.5,285.1 Q373.5,285.1 373.5,289.1 L373.5,360 Z" fill="#3987e5"/>
+<text x="361.5" y="377.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#898781" text-anchor="middle">210f1df</text>
+<path d="M412.5,360 L412.5,298.2 Q412.5,294.2 416.5,294.2 L432.5,294.2 Q436.5,294.2 436.5,298.2 L436.5,360 Z" fill="#3987e5"/>
+<text x="424.5" y="377.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#898781" text-anchor="middle">34da8aa</text>
+<path d="M475.5,360 L475.5,299.7 Q475.5,295.7 479.5,295.7 L495.5,295.7 Q499.5,295.7 499.5,299.7 L499.5,360 Z" fill="#3987e5"/>
+<text x="487.5" y="377.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#898781" text-anchor="middle">1a263ac</text>
+<path d="M538.5,360 L538.5,295.9 Q538.5,291.9 542.5,291.9 L558.5,291.9 Q562.5,291.9 562.5,295.9 L562.5,360 Z" fill="#3987e5"/>
+<text x="550.5" y="377.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#898781" text-anchor="middle">d4a00ac</text>
+<path d="M601.5,360 L601.5,299.0 Q601.5,295.0 605.5,295.0 L621.5,295.0 Q625.5,295.0 625.5,299.0 L625.5,360 Z" fill="#3987e5"/>
+<text x="613.5" y="377.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#898781" text-anchor="middle">24959aa</text>
+<path d="M664.5,360 L664.5,302.4 Q664.5,298.4 668.5,298.4 L684.5,298.4 Q688.5,298.4 688.5,302.4 L688.5,360 Z" fill="#3987e5"/>
+<text x="676.5" y="377.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#898781" text-anchor="middle">64ccec5</text>
+<path d="M727.5,360 L727.5,331.4 Q727.5,327.4 731.5,327.4 L747.5,327.4 Q751.5,327.4 751.5,331.4 L751.5,360 Z" fill="#3987e5"/>
+<text x="739.5" y="377.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#898781" text-anchor="middle">589b7f3</text>
+<path d="M790.5,360 L790.5,331.8 Q790.5,327.8 794.5,327.8 L810.5,327.8 Q814.5,327.8 814.5,331.8 L814.5,360 Z" fill="#3987e5"/>
+<text x="802.5" y="377.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="10" font-weight="400" fill="#898781" text-anchor="middle">fcc9bf2</text>
+<line x1="78" y1="360" x2="834" y2="360" stroke="#383835" stroke-width="1"/>
+<text x="109.5" y="117.7" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="600" fill="#ffffff" text-anchor="middle" style="font-variant-numeric:tabular-nums">3.65 ms</text>
+<text x="802.5" y="318.8" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="600" fill="#ffffff" text-anchor="middle" style="font-variant-numeric:tabular-nums">0.50 ms</text>
+<line x1="109.5" y1="92.0" x2="802.5" y2="92.0" stroke="#383835" stroke-width="1"/>
+<line x1="109.5" y1="92.0" x2="109.5" y2="99.0" stroke="#383835" stroke-width="1"/>
+<line x1="802.5" y1="92.0" x2="802.5" y2="99.0" stroke="#383835" stroke-width="1"/>
+<rect x="416.0" y="81.0" width="80" height="18" rx="3" fill="#1a1a19"/>
+<text x="456.0" y="95.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle">7.25x faster</text>
+<path d="M223.5,400 L223.5,394 L751.5,394 L751.5,400" fill="none" stroke="#898781" stroke-width="1"/>
+<text x="487.5" y="415.0" font-family="system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" font-size="11" font-weight="400" fill="#898781" text-anchor="middle">measured with the zero-width assertion bug present, fixed in fcc9bf2</text>
+</svg>

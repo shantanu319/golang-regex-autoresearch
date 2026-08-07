@@ -40,11 +40,44 @@ You are an autonomous researcher optimizing Go's standard library regexp package
 benchmarks. Lower is better.
 
 ### Correctness gate
-Before recording ANY result, you MUST run:
+Before recording ANY result, you MUST run BOTH of these. They catch
+different things, and passing only one is not passing the gate.
+
 ```bash
+# 1. The vendored unit tests.
 env GOCACHE="${GOCACHE:-/tmp/autoresearch-go-build}" go test ./regexp-opt/... 2>&1 | tail -5
+
+# 2. Differential check against the standard library.
+bash harness/verify.sh 2>&1 | tail -20
 ```
-If ANY test fails, the experiment is invalid. Fix or revert.
+
+If either fails, the experiment is invalid. Fix or revert.
+
+**Why both.** The unit tests alone cannot see a large class of bug in
+exactly the code these experiments touch. Every input they use is a few
+hundred bytes, and `regexp` routes inputs of up to
+`maxBacktrackVector/len(prog.Inst)` bytes to the bitstate backtracker —
+about 29 KB for a 9-instruction program. The NFA path, which is where
+prefilters and skip-scans live, is therefore barely exercised for
+correctness by the suite at all.
+
+This is not hypothetical. A start-rune filter once advanced `pos`
+without recomputing the empty-width context flag, so every pattern with
+a leading `\b`, `\B`, `^` or `$` silently lost matches on large inputs —
+`\bSherlock\b` returned 0 of 97 matches on sherlock.txt. `go test
+./regexp-opt/...` passed for ten commits while a benchmark measured the
+resulting wrong work as a speedup.
+
+`harness/verify.sh` closes that gap: it compares ~50 patterns against
+the standard library over inputs from 60 bytes to 512 KB, deliberately
+straddling the backtracker cutoff, and checks `FindAllStringIndex`,
+`FindAllIndex`, `FindStringSubmatchIndex`, and `MatchString`. It prints
+the pattern, the input, and the surrounding text at the first
+divergence. It needs no test data and runs in about 12 seconds.
+
+**A faster benchmark that changes observable match behaviour is not an
+optimization.** If `verify.sh` fails, the result does not count, no
+matter what `geomean_nsop` says.
 
 ### Known optimization directions
 These are starting points, not an exhaustive list:
@@ -87,16 +120,25 @@ if grep -q "FAIL" test.log; then
     exit 1
 fi
 
-# 4. Run benchmark
+# 4. Differential check against the standard library (BOTH halves of the gate
+#    are required — see "Correctness gate" above for why the unit tests alone
+#    cannot see prefilter bugs on the NFA path). ~12 seconds.
+if ! bash harness/verify.sh > verify.log 2>&1; then
+    echo "VERIFY FAILED — regexp-opt disagrees with stdlib; revert or fix"
+    tail -20 verify.log
+    exit 1
+fi
+
+# 5. Run benchmark
 bash harness/score.sh > run.log 2>&1
 
-# 5. The benchmark harness can take around 250 seconds with the full mixed-content haystack.
+# 6. The benchmark harness can take around 250 seconds with the full mixed-content haystack.
 #    Wait at least that long before assuming it is stuck. Sleeping is acceptable.
 
-# 6. Extract metric
+# 7. Extract metric
 grep "^geomean_nsop:" run.log
 
-# 7. If individual benchmarks are needed:
+# 8. If individual benchmarks are needed:
 grep "^Benchmark" run.log
 ```
 
@@ -110,7 +152,8 @@ commit	geomean_nsop	status	description
 
 - commit: short git hash (7 chars)
 - geomean_nsop: geometric mean ns/op (e.g. 12345.67), 0 for crashes
-- status: `keep`, `discard`, or `crash`
+- status: `keep`, `discard`, `crash`, or `wrong` (failed the
+  differential gate — changed observable match behaviour)
 - description: what this experiment tried
 
 Example:
@@ -135,15 +178,19 @@ LOOP FOREVER:
 4. `git add -A && git commit -m "<description>"`
 5. Run tests: `env GOCACHE="${GOCACHE:-/tmp/autoresearch-go-build}" go test ./regexp-opt/... > test.log 2>&1`
    - If FAIL: attempt fix (max 3 tries), else revert and log as `crash`
-6. Run benchmark: `bash harness/score.sh > run.log 2>&1`
-7. Wait 240 seconds before treating a long-running benchmark as hung.
-8. Extract: `grep "^geomean_nsop:" run.log`
+6. Run the differential gate: `bash harness/verify.sh > verify.log 2>&1`
+   - If FAIL: the change alters observable match behaviour. Attempt fix
+     (max 3 tries), else revert and log as `wrong`. Do NOT benchmark it —
+     a speedup measured from dropped matches is not a result.
+7. Run benchmark: `bash harness/score.sh > run.log 2>&1`
+8. Wait 240 seconds before treating a long-running benchmark as hung.
+9. Extract: `grep "^geomean_nsop:" run.log`
    - If empty: run crashed. `tail -50 run.log`, attempt fix or revert.
-9. Compare to best known geomean_nsop.
-   - If improved: `keep`. Branch advances.
-   - If equal or worse: `discard`. `git reset --hard HEAD~1`
-10. Log result to `results.tsv`.
-11. Go to 1.
+10. Compare to best known geomean_nsop.
+    - If improved: `keep`. Branch advances.
+    - If equal or worse: `discard`. `git reset --hard HEAD~1`
+11. Log result to `results.tsv`.
+12. Go to 1.
 
 ## Simplicity criterion
 

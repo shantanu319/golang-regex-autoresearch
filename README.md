@@ -29,6 +29,11 @@ original readings.
 `harness/score.sh` reports the geometric mean of ns/op over all 27 samples
 (9 benchmarks × `-count=3`). Lower is better.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/results-geomean-dark.svg">
+  <img alt="Column chart of suite geomean ns/op for each commit, falling from 3.65 ms at the unmodified baseline to 0.50 ms at fcc9bf2, a 7.25x improvement" src="docs/results-geomean-light.svg">
+</picture>
+
 | # | Commit | geomean ns/op | vs. previous | vs. baseline | Experiment |
 |---|--------|--------------:|-------------:|-------------:|------------|
 | 0 | `9f13eb0` | 3,645,377 | — | 1.00× | baseline — unmodified `go/regexp` |
@@ -60,6 +65,11 @@ them contribute 1.21× combined.
 
 Median of 3 runs, `-benchtime=2s`. All results verified identical to the
 standard library.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/results-benchmarks-dark.svg">
+  <img alt="Dumbbell chart of median ns/op per benchmark before and after optimization on a log scale, ranging from 433x faster on CharacterClass to 1.02x on NonMatch" src="docs/results-benchmarks-light.svg">
+</picture>
 
 | Benchmark | Pattern | Baseline ns/op | Current ns/op | Speedup |
 |-----------|---------|---------------:|--------------:|--------:|
@@ -152,20 +162,40 @@ silently stop covering the NFA path), and checks eight zero-width patterns
 against the standard library plus a direct backtracker-versus-NFA agreement
 check. Both tests fail on `589b7f3`.
 
-### What this suggests about the harness
+### The gate that would have caught it
 
-The loop's correctness gate is `go test ./regexp-opt/...`, and that gate cannot
-see this class of bug. Two changes would close the gap:
+`go test ./regexp-opt/...` cannot see this class of bug, so the correctness gate
+in `program.md` now has a second half — `harness/verify.sh`, a differential
+check against the standard library:
 
-- **Diff match results against stdlib**, not just run the vendored unit tests.
-  A few hundred patterns compared with `regexp.FindAllStringIndex` would have
-  caught this on the commit that introduced it.
-- **Test above the backtracker cutoff.** Every vendored test input is a few
-  hundred bytes, so the NFA path — the one all the optimizations target — is
-  barely exercised for correctness at all.
+```bash
+bash harness/verify.sh
+# verify: 50 patterns x 5 inputs, 1000 comparisons
+# verify: PASS — regexp-opt agrees with the standard library
+```
 
-As written, an agent can score a large win by breaking zero-width assertions and
-the gate will wave it through, which is what happened here.
+It compares ~50 patterns against stdlib over inputs from 60 bytes to 512 KB —
+deliberately straddling the backtracker cutoff so the NFA path is covered —
+across `FindAllStringIndex`, `FindAllIndex`, `FindStringSubmatchIndex`, and
+`MatchString`. On failure it names the pattern, the input, and the surrounding
+text at the first divergence. It needs no downloaded test data and takes about
+12 seconds.
+
+Run against `589b7f3` it reports 17 disagreements, the first at the 64 KB
+synthetic input:
+
+```
+verify: FAIL — 17 disagreement(s) with the standard library
+
+  pattern "\\b\\w+ing\\b"   input 64KB   FindAllStringIndex
+      stdlib found 1038 matches, regexp-opt 0; regexp-opt stops after 0,
+      missing [17 24] near offset 17 "Sherlock Holmes, telling 0 tales.\r\n"
+```
+
+It lives in `harness/`, which the research agent may not modify, so an
+experiment cannot weaken its own gate. `program.md` now also states the rule
+plainly: a faster benchmark that changes observable match behaviour is not an
+optimization, whatever `geomean_nsop` says.
 
 ---
 
@@ -220,6 +250,9 @@ regexp-opt/           vendored go/regexp + regexp/syntax; the only mutable code
 bench/bench_test.go   9 benchmarks — frozen, agent may not edit
 harness/prepare.sh    fetches sherlock.txt, builds the ~2.4 GB mixed haystack
 harness/score.sh      runs the suite, prints geomean_nsop
+harness/verify.sh     differential correctness gate vs the standard library
+harness/verify/       its implementation
+docs/make_charts.py   regenerates the result charts in docs/
 ```
 
 Gitignored: `results.tsv`, `run.log`, `test.log`, `bench/testdata/*.txt`.
@@ -235,7 +268,8 @@ which understates the real requirement.
 bash harness/prepare.sh          # downloads sherlock.txt, builds ~2.4 GB haystack
 export GOCACHE=/tmp/autoresearch-go-build
 
-go test ./regexp-opt/...         # correctness gate — must pass
+go test ./regexp-opt/...         # correctness gate, part 1 — unit tests
+bash harness/verify.sh           # correctness gate, part 2 — diff vs stdlib
 bash harness/score.sh            # full suite, prints geomean_nsop
 ```
 
@@ -253,7 +287,8 @@ prefiltering, character-class representation, memory layout, constants.
 (stdlib only); use `unsafe`, cgo, assembly, or SIMD; break the linear-time
 guarantee.
 
-**Gate**: `go test ./regexp-opt/...` must pass before any result is recorded.
+**Gate**: both `go test ./regexp-opt/...` and `bash harness/verify.sh` must pass
+before any result is recorded.
 
 ## Measurement notes
 

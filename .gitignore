@@ -1,4 +1,5 @@
 results.tsv
 run.log
 test.log
+verify.log
 bench/testdata/*.txt
