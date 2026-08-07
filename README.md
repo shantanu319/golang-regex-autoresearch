@@ -9,11 +9,9 @@ the geometric mean of ns/op across all benchmarks. It then runs a closed loop �
 edit, test, benchmark, keep or revert — recording each experiment as a commit.
 `program.md` is the agent's operating manual.
 
-Current state: **7.16× faster** than stock `go/regexp` on the suite's geomean,
-across 10 accepted experiments. One of the nine benchmarks is invalidated by a
-correctness bug the harness did not catch — see
-[Correctness](#correctness-one-benchmark-is-invalid), which is important for
-reading the numbers below.
+Current state: **7.25× faster** than stock `go/regexp` on the suite's geomean,
+across 10 accepted experiments plus one correctness fix. Every pattern in the
+suite now returns exactly the same matches as the standard library.
 
 ---
 
@@ -43,7 +41,8 @@ original readings.
 | 7 | `d4a00ac` | 1,064,095 | −5.6% | 3.43× | fast ASCII byte decode for `r1` prefetch |
 | 8 | `24959aa` | 1,015,709 | +4.8% | 3.59× | avoid interface dispatch after byte filter finds ASCII |
 | 9 | `64ccec5` | 961,950 | +5.6% | 3.79× | inline `MatchRune` for 1/2/4-pair char classes |
-| 10 | `589b7f3` | **509,323** | +88.9% | **7.16×** | backward walk from inner literal over start-filter run |
+| 10 | `589b7f3` | 509,323 | +88.9% | 7.16× | backward walk from inner literal over start-filter run |
+| 11 | `fcc9bf2` | **502,853** | +1.3% | **7.25×** | recompute empty-width context after a prefilter skip (correctness fix) |
 
 Commit `7ba8a08` is omitted: it edited `program.md` and `harness/prepare.sh`
 only, with no change to `regexp-opt/`.
@@ -59,25 +58,27 @@ them contribute 1.21× combined.
 
 ### Per-benchmark, baseline vs. current
 
-Median of 3 runs, `-benchtime=2s`.
+Median of 3 runs, `-benchtime=2s`. All results verified identical to the
+standard library.
 
 | Benchmark | Pattern | Baseline ns/op | Current ns/op | Speedup |
 |-----------|---------|---------------:|--------------:|--------:|
-| CharacterClass | `[a-zA-Z]+@[a-zA-Z]+\.[a-zA-Z]+` | 104,690,394,060 | 259,974,570 | **402.69×** |
-| AlternationMedium | `Sherlock\|Watson\|Holmes\|Moriarty\|Lestrade` | 52,064,309 | 2,313,129 | 22.51× |
-| BoundedRepeat | `[a-z]{2,4}ing` | 37,971,835 | 2,441,816 | 15.55× |
-| LiteralCaseInsensitive | `(?i)sherlock holmes` | 23,287,793 | 3,819,999 | 6.10× |
-| LiteralMatch | `Sherlock Holmes` | 97,233 | 41,561 | 2.34× |
-| NonMatch | `ZZZZZNOTFOUND` | 19,250 | 19,062 | 1.01× |
-| UnicodeWordBoundary ⚠️ | `\b\w{4,}\b` | 49,383,481 | 30,809,224 | 1.60× (invalid) |
-| CompileSimple † | compile `[a-z]+` | 5,208 | 1,349 | not meaningful |
-| CompileComplex † | compile IPv4 pattern | 35,626 | 10,952 | not meaningful |
+| CharacterClass | `[a-zA-Z]+@[a-zA-Z]+\.[a-zA-Z]+` | 104,690,394,060 | 241,726,801 | **433.09×** |
+| AlternationMedium | `Sherlock\|Watson\|Holmes\|Moriarty\|Lestrade` | 52,064,309 | 2,236,317 | 23.28× |
+| BoundedRepeat | `[a-z]{2,4}ing` | 37,971,835 | 2,484,725 | 15.28× |
+| LiteralCaseInsensitive | `(?i)sherlock holmes` | 23,287,793 | 3,707,377 | 6.28× |
+| LiteralMatch | `Sherlock Holmes` | 97,233 | 36,742 | 2.65× |
+| UnicodeWordBoundary | `\b\w{4,}\b` | 49,383,481 | 31,398,430 | 1.57× |
+| NonMatch | `ZZZZZNOTFOUND` | 19,250 | 18,930 | 1.02× |
+| CompileSimple † | compile `[a-z]+` | 5,208 | 1,453 | not meaningful |
+| CompileComplex † | compile IPv4 pattern | 35,626 | 13,252 | not meaningful |
 
 **CharacterClass dominates.** It is the only benchmark running against the
 2.4 GB haystack, and stock `go/regexp` takes **105 seconds per iteration** on it.
-Nearly all of that win arrives in the very last commit — the benchmark sat
-between 86 s and 105 s for the first ten commits and dropped to 0.26 s at
-`589b7f3`. That single change is why the geomean halves at the end.
+Nearly all of that win arrives in the very last optimization — the benchmark sat
+between 86 s and 105 s for the first ten commits, dropped to 0.26 s at
+`589b7f3`, and reads 0.24 s today. That single change is why the geomean halves
+at the end.
 
 † The two compile benchmarks should be read as *no signal*. They are
 microsecond-scale and run in the same process as benchmarks holding a multi-GB
@@ -88,59 +89,83 @@ genuine 3–4× compile speedup is not a plausible reading of these numbers.
 
 ---
 
-## Correctness: one benchmark is invalid
+## The zero-width assertion bug (fixed in `fcc9bf2`)
 
-`BenchmarkUnicodeWordBoundary` measures `\b\w{4,}\b`, and the optimized package
-**silently returns fewer matches than it should** for that pattern.
+For ten commits the optimized package **silently returned fewer matches than it
+should** for any pattern with a leading zero-width assertion. This is worth
+recording in some detail, because the harness scored those ten commits without
+noticing and one of the nine benchmarks was measuring wrong work throughout.
 
-On `sherlock.txt`, checked against the Go standard library as ground truth:
+On `sherlock.txt`, against the Go standard library as ground truth:
 
-```
-stdlib    57,367 matches
-regexp-opt 53,008 matches     — 4,359 missing (7.6%)
-```
+| Pattern | stdlib | `regexp-opt` before fix | missing |
+|---------|-------:|------------------------:|--------:|
+| `\b\w{4,}\b` (BenchmarkUnicodeWordBoundary) | 57,367 | 53,008 | 7.6% |
+| `\b\w+ing\b` | 2,586 | 1,897 | 27% |
+| `\Bell\b` | 376 | 208 | 45% |
+| `(?m)^\w+` | 8,064 | 1 | 99.99% |
+| `\bSherlock\b` | 97 | **0** | 100% |
 
-The other six matching patterns in the suite agree with stdlib **exactly**, on
-both `sherlock.txt` and a 200 MB slice of `mixed-content.txt`. So the bug is
-confined to zero-width assertions, and the rest of the speedup stands.
+So the damage ranged from a 7.6% shortfall to returning nothing at all,
+depending on how the pattern interacted with the filter.
+`BenchmarkUnicodeWordBoundary`'s pre-fix 1.60× was therefore not a valid result.
+The suite's other six patterns use no zero-width assertions and were correct
+throughout, so the rest of the speedup always stood.
 
-**Introduced by** `60cc9ec` (the start-rune filter). `9f13eb0` and `d428c38` are
-correct; every commit from `60cc9ec` onward drops the same 4,359 matches.
-
-**Why the test suite passes.** The divergence only appears on inputs larger than
-**29,127 bytes**. That is the bitstate-backtracker cutoff for this pattern
-(9 instructions × 29,127 ≈ 262,144 = `maxBacktrackVector`). Below it `regexp`
-uses the backtracker, whose filter advances one position at a time and is
-correct. Above it the NFA path runs, and only that path is broken. Every input
-in `regexp-opt`'s vendored test suite is far below the cutoff, so `go test
-./regexp-opt/...` passes clean while the benchmark silently measures wrong work.
+**Introduced by** `60cc9ec`, the start-rune filter. `9f13eb0` and `d428c38` are
+clean; every commit from `60cc9ec` through `589b7f3` carries it.
 
 **Root cause.** In `machine.match` (`regexp-opt/exec.go`), the start-rune filter
 and inner-literal prefilter jump `pos` forward and refresh `r`, `width`, `r1`,
-and `width1` — but never recompute `flag`, the lazily-evaluated empty-width
-context. The subsequent `m.add` therefore evaluates `\b` against the context of
-wherever the scan *started*, not where it landed. Matches whose start is
-preceded by two or more non-word bytes (`", "`, `"\r\n"`, a BOM) are the ones
-lost.
+and `width1` — but not `flag`, the lazily-evaluated empty-width context. The
+subsequent `m.add` therefore evaluated `\b` against the neighbours of wherever
+the scan *started*, not where it landed. The matches lost were the ones whose
+start is preceded by two or more non-word bytes — `", "`, `"\r\n"`, a BOM.
 
-Confirmed by patching a context recompute in before the add:
+**Why the test suite never caught it.** The divergence only appears on inputs
+larger than **29,127 bytes** for that pattern. That is exactly the bitstate
+backtracker cutoff: `maxBacktrackVector / len(prog.Inst)` = 262,144 / 9 = 29,127.
+Below it `regexp` uses the backtracker, which advances one position at a time and
+recomputes context per attempt, so it was always correct. Above it the NFA runs,
+and only the NFA was broken. Every input in the vendored test suite is far below
+the cutoff, so `go test ./regexp-opt/...` passed clean for ten commits.
+
+**The fix.** Recompute the context whenever a prefilter moved `pos`:
 
 ```go
-flag = i.context(pos)   // recompute stale context after a filter skip
-if !m.matched && (startCond == 0 || flag.match(startCond)) {
+if pos != posBefore && m.re.hasEmptyWidth {
+    flag = i.context(pos)
+}
 ```
 
-With that line, `\b\w{4,}\b`, `\bSherlock\b`, and `\b\w+ing\b` all return
-exactly the stdlib counts. **The fix is not applied on this branch** — it costs
-performance on every iteration and would invalidate the table above, so it needs
-its own benchmark round.
+`hasEmptyWidth` is precomputed at compile time: programs containing no
+`InstEmptyWidth` never consult that flag, so they are gated out and pay nothing.
 
-Excluding the broken benchmark, the suite geomean goes 2,637,348 → 305,163 ns/op,
-an **8.64×** speedup over baseline.
+**The fix is close to free.** `BenchmarkUnicodeWordBoundary` costs 1.9% more
+than the buggy version while returning 4,359 additional matches; the suite
+geomean is unchanged within noise. Correctness here was not a
+performance trade-off.
 
-Two things this suggests about the harness itself: the correctness gate should
-compare match *results* against stdlib rather than only running the vendored unit
-tests, and it should exercise inputs above the backtracker cutoff.
+`regexp-opt/prefilter_context_test.go` covers the regression. It drives inputs
+past the backtracker cutoff, asserts they actually exceed it (so the test cannot
+silently stop covering the NFA path), and checks eight zero-width patterns
+against the standard library plus a direct backtracker-versus-NFA agreement
+check. Both tests fail on `589b7f3`.
+
+### What this suggests about the harness
+
+The loop's correctness gate is `go test ./regexp-opt/...`, and that gate cannot
+see this class of bug. Two changes would close the gap:
+
+- **Diff match results against stdlib**, not just run the vendored unit tests.
+  A few hundred patterns compared with `regexp.FindAllStringIndex` would have
+  caught this on the commit that introduced it.
+- **Test above the backtracker cutoff.** Every vendored test input is a few
+  hundred bytes, so the NFA path — the one all the optimizations target — is
+  barely exercised for correctness at all.
+
+As written, an agent can score a large win by breaking zero-width assertions and
+the gate will wave it through, which is what happened here.
 
 ---
 
@@ -158,8 +183,7 @@ this for a required literal prefix; the agent extended it in several directions.
    (`collectStartRunes`, `canMatchEmpty`) to build a bitmap of runes that can
    begin a match: `[4]uint32` for ASCII plus a "non-ASCII possible" flag.
    At run time, skip any position whose rune isn't in the set. Applied to both
-   the NFA loop and the backtracker. *This is the change that introduced the
-   word-boundary bug.*
+   the NFA loop and the backtracker.
 
 3. **Inner-literal prefilter** (`77ac2be`) — many patterns have no usable prefix
    but do contain a mandatory literal (`@` in the email pattern).
@@ -172,7 +196,7 @@ this for a required literal prefix; the agent extended it in several directions.
    *unbounded* (as in `[a-zA-Z]+@...`, where `[a-zA-Z]+` can be any length), step
    3 can't compute a skip target. This walks backward from the literal across
    bytes that pass the start-rune filter to find the start of the run containing
-   it. This is what turns CharacterClass from 105 s into 0.26 s.
+   it. This is what turns CharacterClass from 105 s into 0.24 s.
 
 5. **Dispatch and decode micro-optimizations** (`210f1df`, `34da8aa`, `1a263ac`,
    `d4a00ac`, `24959aa`, `64ccec5`) — scan raw bytes instead of going through the
@@ -191,6 +215,7 @@ regexp-opt/           vendored go/regexp + regexp/syntax; the only mutable code
   backtrack.go        bitstate backtracker
   onepass.go          one-pass DFA
   regexp.go           Regexp struct, Compile, public API, compile-time analysis
+  prefilter_context_test.go  regression test for the prefilter/context bug
   syntax/             parser, simplifier, compiler
 bench/bench_test.go   9 benchmarks — frozen, agent may not edit
 harness/prepare.sh    fetches sherlock.txt, builds the ~2.4 GB mixed haystack
@@ -239,9 +264,15 @@ the main tree:
 - Intel Xeon @ 2.80 GHz, 4 vCPU, 16 GB RAM, Linux 6.18
 - Go 1.25.1 linux/amd64
 - `harness/score.sh` defaults: `-benchtime=2s -count=3`
-- `harness/` and `bench/` pinned at `589b7f3` for every run, so only the package
-  under test varies
+- `harness/` and `bench/` pinned for every run, so only the package under test
+  varies
 
-Caveats worth keeping in mind: three samples per benchmark is thin, the compile
-benchmarks are dominated by variance (see †), and differences under ~5% between
-adjacent commits should not be treated as real.
+**How much precision to expect.** The `hasEmptyWidth` gate means patterns
+without a zero-width assertion take a provably identical code path before and
+after `fcc9bf2` — yet their measured medians still moved by up to 11.6%
+(LiteralMatch) between the two sessions. That is a direct read of session-to-
+session variance on this machine: differences under roughly 10% between adjacent
+commits are not real. Within a single session the matching benchmarks are much
+tighter (~1.03× spread across three runs); it is the comparison *between*
+sessions that is loose. Three samples per benchmark is thin either way, and the
+compile benchmarks are pure noise (see †).
